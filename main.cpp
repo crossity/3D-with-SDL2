@@ -124,6 +124,7 @@ void Render3Dto2D(triangle tri, vec3d camera, vec3d angle, vec2d *ret);
 vec3d Light(vec3d light, float strength, triangle tri);
 
 vec3d RotateY(vec3d c, float angle, vec3d p);
+vec3d RotateX(vec3d c, float angle, vec3d p);
 
 void DrawTriangle(vec2d tri[3], SDL_Renderer *renderer);
 void DrawFillTriangle(vec2d tri[3], vec3d color, SDL_Renderer *renderer);
@@ -132,11 +133,13 @@ bool CollideRectPoint(vec2d point, vec2d r_start, vec2d r_size);
 bool PointInLine(vec2d point, vec2d l_start, vec2d l_end);
 vector<vec2d> CollideRectOutlineLine(vec2d l_start, vec2d l_end, vec2d r_start, vec2d r_size);
 
+float q_sqrt(float number);
+
 vec3d to_camera(vec3d p, vec3d camera, vec3d angle) {
     p.x -= camera.x;
     p.y -= camera.y;
     p.z -= camera.z - 4.f;
-    return RotateY(vec3d(0, 0, 4), -angle.y, p);
+    return RotateX(vec3d(0, 0, 4), -angle.x, RotateY(vec3d(0, 0, 4), -angle.y, p));
 }
 
 int partition(vector<triangle> &arr, int start, int end, vec3d camera, vec3d angle) {
@@ -198,9 +201,15 @@ bool OnUserCreate(mesh &m) {
     return true;
 }
 
-bool OnUserUpdate(SDL_Window *window, SDL_Renderer *renderer, mesh &m, int delta, vec3d camera, vec3d angle) {
+bool OnUserUpdate(SDL_Window *window, SDL_Renderer *renderer, mesh &m, int delta, vec3d camera, vec3d &angle) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
     SDL_RenderClear(renderer);
+    int mouseX, mouseY;
+
+    SDL_GetMouseState(&mouseX, &mouseY);
+
+    angle.x += (Height / 2 - mouseY) * delta / 100000000.f;
+    angle.y -= (Width / 2 - mouseX) * delta / 100000000.f;
 
     quickSort(m.tris, 0, m.tris.size() - 1, camera, angle);
     // for (int j = 0; j < m.tris.size(); j++) {
@@ -231,9 +240,6 @@ bool OnUserUpdate(SDL_Window *window, SDL_Renderer *renderer, mesh &m, int delta
     for (int t = 0; t < m.tris.size(); t++) {
         vec2d points[3];
         Render3Dto2D(m.tris[t], camera, angle, points);
-        for (int p = 0; p < 3; p++) {
-            m.tris[t].p[p] = RotateY(vec3d(), (float)delta / 1000000.f, m.tris[t].p[p]);
-        }
         bool render = true;
         for (vec2d point : points) {
             if (point.x < 0 - Offset || point.y < 0 - Offset || point.x >= Width + Offset|| point.y >= Height + Offset) {
@@ -302,9 +308,24 @@ int main() {
                             camera_angle.x -= delta / 500000.f;
                             break;
                         case SDLK_w:
-                            camera = RotateY(camera, -camera_angle.y, camera);
+                            camera = RotateX(camera, -camera_angle.x, RotateY(camera, -camera_angle.y, camera));
                             camera.z -= delta / 100000.f;
-                            camera = RotateY(last_camera, camera_angle.y, camera);
+                            camera = RotateX(last_camera, camera_angle.x, RotateY(last_camera, camera_angle.y, camera));
+                            break;
+                        case SDLK_s:
+                            camera = RotateX(camera, -camera_angle.x, RotateY(camera, -camera_angle.y, camera));
+                            camera.z += delta / 100000.f;
+                            camera = RotateX(last_camera, camera_angle.x, RotateY(last_camera, camera_angle.y, camera));
+                            break;
+                        case SDLK_a:
+                            camera = RotateX(camera, -camera_angle.x, RotateY(camera, -camera_angle.y, camera));
+                            camera.x -= delta / 100000.f;
+                            camera = RotateX(last_camera, camera_angle.x, RotateY(last_camera, camera_angle.y, camera));
+                            break;
+                        case SDLK_d:
+                            camera = RotateX(camera, -camera_angle.x, RotateY(camera, -camera_angle.y, camera));
+                            camera.x += delta / 100000.f;
+                            camera = RotateX(last_camera, camera_angle.x, RotateY(last_camera, camera_angle.y, camera));
                             break;
                         default:
                             break;
@@ -329,7 +350,7 @@ void Render3Dto2D(triangle tri, vec3d camera, vec3d angle, vec2d *ret) {
         p.x -= camera.x;
         p.y -= camera.y;
         p.z -= camera.z - 4.f;
-        p = RotateY(vec3d(0, 0, 4), -angle.y, p);
+        p = RotateX(vec3d(0, 0, 4), -angle.x, RotateY(vec3d(0, 0, 4), -angle.y, p));
         if (p.z > 4) {
             norm = false;
             break;
@@ -381,7 +402,7 @@ vec3d Light(vec3d light, float strength, triangle tri) {
     X -= light.x;
     Y -= light.y;
     Z -= light.z;
-    float dist = sqrt(X*X + Y*Y + Z*Z);
+    float dist = q_sqrt(X*X + Y*Y + Z*Z);
     dist /= strength;
     if (dist > 1)
         dist = 1;
@@ -400,6 +421,21 @@ vec3d RotateY(vec3d c, float angle, vec3d p) {
 
     p.x = xnew + c.x;
     p.z = znew + c.z;
+    return p;
+}
+
+vec3d RotateX(vec3d c, float angle, vec3d p) {
+    float sn = sin(angle);
+    float cs = cos(angle);
+
+    p.z -= c.z;
+    p.y -= c.y;
+
+    float znew = p.y * cs - p.z * sn;
+    float xnew = p.y * sn + p.z * cs;
+
+    p.z = xnew + c.z;
+    p.y = znew + c.y;
     return p;
 }
 
@@ -458,4 +494,20 @@ vector<vec2d> CollideRectOutlineLine(vec2d l_start, vec2d l_end, vec2d r_start, 
     }
 
     return ret;
+}
+
+float q_sqrt(float number) {
+    long i;
+    float x2, y;
+    const float threehalfs = 1.5F;
+
+    x2 = number * 0.5F;
+    y  = number;
+    i  = * ( long * ) &y;                       // evil floating point bit level hacking
+    i  = 0x5f3759df - ( i >> 1 );               // what the fuck? 
+    y  = * ( float * ) &i;
+    y  = y * ( threehalfs - ( x2 * y * y ) );   // 1st iteration
+//  y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+
+    return abs(1 / y);
 }
